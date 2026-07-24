@@ -120,7 +120,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [notifications, setNotifications] = useState<NotificationItem[]>(MOCK_NOTIFICATIONS);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(MOCK_ACTIVITY_LOGS);
 
-  const [activeTab, setActiveTab] = useState<string>('jobs');
+  const [activeTab, setActiveTab] = useState<string>('find-work');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Selected State
