@@ -1,0 +1,6 @@
+{
+  "name": "WorkVerse Freelance Marketplace",
+  "description": "An enterprise-grade freelance marketplace platform connecting clients, freelancers, agencies, and admins with AI helpers, escrow wallet, contracts, real-time messaging, and connects system.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
