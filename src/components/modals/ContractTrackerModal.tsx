@@ -9,6 +9,7 @@ export const ContractTrackerModal: React.FC = () => {
     selectedContract,
     addTimeTrackerEntry,
     releaseMilestoneEscrow,
+    submitMilestone,
     currentRole
   } = useApp();
 
@@ -132,9 +133,12 @@ export const ContractTrackerModal: React.FC = () => {
                     className="flex-1 bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-slate-800 focus:outline-none"
                   />
                   <button
-                    onClick={() => {
-                      m.status = 'submitted';
-                      m.submissionNote = milestoneNote || 'Delivered milestone code artifact';
+                    onClick={async () => {
+                      await submitMilestone(
+                        selectedContract.id,
+                        m.id,
+                        milestoneNote || 'Delivered milestone code artifact'
+                      );
                       alert('Milestone work submitted to Client for review & escrow release!');
                     }}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-3 py-1 rounded-lg text-xs flex items-center gap-1 shadow-xs"

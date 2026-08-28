@@ -32,6 +32,8 @@ export const JobDetailsOffcanvas: React.FC = () => {
     setIsJobDetailsOpen,
     setIsProposalModalOpen,
     currentUser,
+    currentRole,
+    goToLogin,
     setIsScamGuardModalOpen,
     checkAIScam
   } = useApp();
@@ -48,7 +50,10 @@ export const JobDetailsOffcanvas: React.FC = () => {
   };
 
   const handleApply = () => {
-    // Open proposal modal for the selected job
+    if (currentRole !== 'freelancer' && currentRole !== 'agency') {
+      goToLogin('freelancer');
+      return;
+    }
     setIsProposalModalOpen(true);
   };
 
@@ -121,13 +126,15 @@ export const JobDetailsOffcanvas: React.FC = () => {
                 <span className="hidden sm:inline">{copied ? 'Link Copied!' : 'Share'}</span>
               </button>
 
+              {(currentRole === 'freelancer' || currentRole === 'agency' || currentRole === 'guest') && (
               <button
                 onClick={handleApply}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-transform active:scale-95"
               >
-                <span>Apply Now</span>
+                <span>{currentRole === 'guest' ? 'Sign in to apply' : 'Apply Now'}</span>
                 <Zap className="w-4 h-4 text-amber-300 fill-current" />
               </button>
+              )}
             </div>
           </div>
 
@@ -327,13 +334,15 @@ export const JobDetailsOffcanvas: React.FC = () => {
                 
                 {/* Apply Box */}
                 <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs">
+                  {(currentRole === 'freelancer' || currentRole === 'agency' || currentRole === 'guest') && (
                   <button
                     onClick={handleApply}
                     className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md transition-transform active:scale-95"
                   >
-                    <span>Submit a Proposal</span>
+                    <span>{currentRole === 'guest' ? 'Sign in to apply' : 'Submit a Proposal'}</span>
                     <Zap className="w-4 h-4 text-amber-300 fill-current" />
                   </button>
+                  )}
 
                   <div className="text-[11px] text-slate-500 space-y-1 text-center font-mono">
                     <p>Required Connects: <span className="font-bold text-slate-900">{requiredConnects}</span></p>
@@ -412,7 +421,7 @@ export const JobDetailsOffcanvas: React.FC = () => {
                     {/* Spend Stats */}
                     <div className="flex items-center gap-2 text-slate-700">
                       <DollarSign className="w-4 h-4 text-slate-400 shrink-0" />
-                      <span>${selectedJob.clientTotalSpent.toLocaleString()} total spent</span>
+                      <span>${selectedJob.clientTotalSpent.toLocaleString('en-US')} total spent</span>
                     </div>
 
                     {/* Hire stats */}

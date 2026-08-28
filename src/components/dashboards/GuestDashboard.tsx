@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 
 export const GuestDashboard: React.FC = () => {
-  const { jobs, setSelectedJob, setIsJobDetailsOpen, setRole } = useApp();
+  const { jobs, setSelectedJob, setIsJobDetailsOpen, goToLogin } = useApp();
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-16">
@@ -39,18 +39,18 @@ export const GuestDashboard: React.FC = () => {
 
         <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
           <button
-            onClick={() => setRole('freelancer')}
+            onClick={() => goToLogin('freelancer')}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-3.5 rounded-xl text-sm flex items-center gap-2 shadow-md transition-transform active:scale-95"
           >
-            <span>Explore as Freelancer</span>
+            <span>Sign in as Freelancer</span>
             <ArrowRight className="w-4 h-4" />
           </button>
 
           <button
-            onClick={() => setRole('client')}
+            onClick={() => goToLogin('client')}
             className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-3.5 rounded-xl text-sm flex items-center gap-2 shadow-md transition-transform active:scale-95"
           >
-            <span>Post a Job as Client</span>
+            <span>Sign in as Client</span>
             <Briefcase className="w-4 h-4" />
           </button>
         </div>
@@ -80,7 +80,7 @@ export const GuestDashboard: React.FC = () => {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-slate-900">Featured Open Marketplace Opportunities</h2>
-          <button onClick={() => setRole('freelancer')} className="text-emerald-700 text-xs font-bold hover:underline">
+          <button onClick={() => goToLogin('freelancer')} className="text-emerald-700 text-xs font-bold hover:underline">
             View All ({jobs.length})
           </button>
         </div>

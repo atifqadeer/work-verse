@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+'use client';
+
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   User,
   UserRole,
@@ -30,11 +32,17 @@ import {
   MOCK_NOTIFICATIONS,
   MOCK_ACTIVITY_LOGS
 } from '../lib/mockData';
+import { subscribeToLiveNotifications } from '../lib/live-notifications';
+import { isFirebaseLiveEnabled } from '../lib/firebase-client';
+import { ROLE_HOME_TAB } from '../lib/roles';
 
 interface AppContextType {
   currentRole: UserRole;
   setRole: (role: UserRole) => void;
   currentUser: User;
+  isAuthenticated: boolean;
+  authChecked: boolean;
+  loginIntentRole: UserRole;
   freelancerProfile: FreelancerProfile;
   clientProfile: ClientProfile;
   agencyProfile: AgencyProfile;
@@ -47,16 +55,14 @@ interface AppContextType {
   disputes: Dispute[];
   notifications: NotificationItem[];
   activityLogs: ActivityLog[];
-  
-  // Active Navigation Tab
+  isBootstrapping: boolean;
+
   activeTab: string;
   setActiveTab: (tab: string) => void;
 
-  // Search Filter state
   searchQuery: string;
   setSearchQuery: (q: string) => void;
 
-  // Selected Items for Modals
   selectedJob: Job | null;
   setSelectedJob: (job: Job | null) => void;
   selectedContract: Contract | null;
@@ -64,7 +70,6 @@ interface AppContextType {
   activeConversation: Conversation | null;
   setActiveConversation: (conv: Conversation | null) => void;
 
-  // Modal Open States
   isPostJobModalOpen: boolean;
   setIsPostJobModalOpen: (open: boolean) => void;
   isProposalModalOpen: boolean;
@@ -84,17 +89,22 @@ interface AppContextType {
   isJobDetailsOpen: boolean;
   setIsJobDetailsOpen: (open: boolean) => void;
 
-  // Actions
+  loginUser: (email: string, role: UserRole, password: string) => Promise<string | null>;
+  loginAsGuest: () => Promise<void>;
+  logoutUser: () => Promise<void>;
+  goToLogin: (role?: UserRole) => void;
   createJob: (jobData: Partial<Job>) => Promise<void>;
   submitProposal: (proposalData: Partial<Proposal>) => Promise<void>;
+  acceptProposal: (proposalId: string) => Promise<void>;
+  declineProposal: (proposalId: string) => Promise<void>;
   releaseMilestoneEscrow: (contractId: string, milestoneId: string) => Promise<void>;
+  submitMilestone: (contractId: string, milestoneId: string, note: string) => Promise<void>;
   sendMessage: (text: string, voiceNoteUrl?: string) => Promise<void>;
   buyConnects: (amount: number, price: number) => Promise<void>;
   resolveDispute: (disputeId: string, decision: string, refundClient: number, releaseFreelancer: number) => Promise<void>;
   addTimeTrackerEntry: (contractId: string, hours: number, notes: string) => Promise<void>;
   markNotificationRead: (id: string) => void;
-  
-  // AI Actions
+
   generateAIJobDescription: (prompt: string, category: string, experience: string) => Promise<any>;
   generateAIProposal: (jobTitle: string, jobDesc: string) => Promise<any>;
   optimizeAIProfile: (headline: string, overview: string) => Promise<any>;
@@ -103,13 +113,25 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+function authHeaders(user: User): HeadersInit {
+  return {
+    'Content-Type': 'application/json',
+    'x-user-id': user.id,
+    'x-user-name': user.name,
+    'x-user-role': user.role
+  };
+}
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentRole, setCurrentRole] = useState<UserRole>('freelancer');
+  const [currentRole, setCurrentRole] = useState<UserRole>('guest');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [loginIntentRole, setLoginIntentRole] = useState<UserRole>('freelancer');
   const [users, setUsers] = useState<User[]>(MOCK_USERS);
   const [freelancerProfile, setFreelancerProfile] = useState<FreelancerProfile>(MOCK_FREELANCER_PROFILE);
   const [clientProfile, setClientProfile] = useState<ClientProfile>(MOCK_CLIENT_PROFILE);
   const [agencyProfile, setAgencyProfile] = useState<AgencyProfile>(MOCK_AGENCY_PROFILE);
-  
+
   const [jobs, setJobs] = useState<Job[]>(MOCK_JOBS);
   const [proposals, setProposals] = useState<Proposal[]>(MOCK_PROPOSALS);
   const [contracts, setContracts] = useState<Contract[]>(MOCK_CONTRACTS);
@@ -119,16 +141,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [disputes, setDisputes] = useState<Dispute[]>(MOCK_DISPUTES);
   const [notifications, setNotifications] = useState<NotificationItem[]>(MOCK_NOTIFICATIONS);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(MOCK_ACTIVITY_LOGS);
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<string>('find-work');
+  const [activeTab, setActiveTab] = useState<string>('guest-explore');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Selected State
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(MOCK_CONVERSATIONS[0]);
 
-  // Modals
   const [isPostJobModalOpen, setIsPostJobModalOpen] = useState(false);
   const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -139,33 +160,160 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isJobDetailsOpen, setIsJobDetailsOpen] = useState(false);
 
-  // Map user to currentRole
   const currentUser = users.find(u => u.role === currentRole) || users[0];
+  const currentUserRef = useRef(currentUser);
+  currentUserRef.current = currentUser;
 
-  const setRole = (role: UserRole) => {
-    setCurrentRole(role);
-    if (role === 'client') setActiveTab('client-jobs');
-    else if (role === 'freelancer') setActiveTab('find-work');
-    else if (role === 'agency') setActiveTab('agency-overview');
-    else if (role === 'admin') setActiveTab('admin-analytics');
-    else if (role === 'support') setActiveTab('support-tickets');
-    else setActiveTab('guest-explore');
+  const applyBootstrap = useCallback((data: any) => {
+    if (Array.isArray(data.users) && data.users.length) setUsers(data.users);
+    if (data.freelancerProfile) setFreelancerProfile(data.freelancerProfile);
+    if (data.clientProfile) setClientProfile(data.clientProfile);
+    if (data.agencyProfile) setAgencyProfile(data.agencyProfile);
+    if (Array.isArray(data.jobs)) setJobs(data.jobs);
+    if (Array.isArray(data.proposals)) setProposals(data.proposals);
+    if (Array.isArray(data.contracts)) setContracts(data.contracts);
+    if (Array.isArray(data.conversations)) {
+      setConversations(data.conversations);
+      setActiveConversation((prev: Conversation | null) => {
+        if (prev) return data.conversations.find((c: Conversation) => c.id === prev.id) || data.conversations[0] || null;
+        return data.conversations[0] || null;
+      });
+    }
+    if (Array.isArray(data.messages)) setMessages(data.messages);
+    if (Array.isArray(data.transactions)) setTransactions(data.transactions);
+    if (Array.isArray(data.disputes)) setDisputes(data.disputes);
+    if (Array.isArray(data.notifications)) setNotifications(data.notifications);
+    if (Array.isArray(data.activityLogs)) setActivityLogs(data.activityLogs);
+    if (data.currentUser?.role) setCurrentRole(data.currentUser.role);
+  }, []);
+
+  const refreshBootstrap = useCallback(async (userOverride?: User) => {
+    const actor = userOverride || currentUserRef.current;
+    try {
+      const res = await fetch('/api/bootstrap', {
+        headers: authHeaders(actor),
+        credentials: 'include'
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      applyBootstrap(data);
+    } catch (err) {
+      console.error('Bootstrap failed, using local mock data', err);
+    } finally {
+      setIsBootstrapping(false);
+    }
+  }, [applyBootstrap]);
+
+  useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.user) {
+            setIsAuthenticated(true);
+            setCurrentRole(data.user.role);
+            setActiveTab(ROLE_HOME_TAB[data.user.role as UserRole]);
+            await refreshBootstrap(data.user);
+            setAuthChecked(true);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Session restore failed', err);
+      }
+      setIsBootstrapping(false);
+      setAuthChecked(true);
+    };
+
+    restoreSession();
+  }, [refreshBootstrap]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !currentUser?.id) return;
+
+    if (isFirebaseLiveEnabled()) {
+      return subscribeToLiveNotifications(currentUser.id, items => {
+        setNotifications(items);
+      });
+    }
+
+    const interval = window.setInterval(async () => {
+      try {
+        const res = await fetch('/api/notifications', {
+          headers: authHeaders(currentUser),
+          credentials: 'include'
+        });
+        if (res.ok) setNotifications(await res.json());
+      } catch {
+        // keep existing notifications if polling fails
+      }
+    }, 8000);
+
+    return () => window.clearInterval(interval);
+  }, [isAuthenticated, currentUser.id]);
+
+  const applyRoleTab = (role: UserRole) => {
+    setActiveTab(ROLE_HOME_TAB[role]);
   };
 
-  // Actions
+  const goToLogin = (role?: UserRole) => {
+    if (role) setLoginIntentRole(role);
+    void logoutUser();
+  };
+
+  const setRole = async (role: UserRole) => {
+    goToLogin(role);
+  };
+
+  const loginUser = async (email: string, role: UserRole, password: string) => {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, role, password })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return data.error || 'Login failed';
+    }
+    setIsAuthenticated(true);
+    setCurrentRole(data.user.role);
+    applyRoleTab(data.user.role);
+    await refreshBootstrap(data.user);
+    return null;
+  };
+
+  const loginAsGuest = async () => {
+    const error = await loginUser('guest@workverse.com', 'guest', 'WorkVerse123!');
+    if (error) console.error(error);
+  };
+
+  const logoutUser = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    } catch (err) {
+      console.error('Logout failed', err);
+    }
+    setIsAuthenticated(false);
+    setCurrentRole('guest');
+    setActiveTab('guest-explore');
+    setNotifications([]);
+  };
+
   const createJob = async (jobData: Partial<Job>) => {
     try {
       const res = await fetch('/api/jobs', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': currentUser.id,
-          'x-user-name': currentUser.name,
-          'x-user-role': currentUser.role
-        },
+        headers: authHeaders(currentUser),
+        credentials: 'include',
         body: JSON.stringify(jobData)
       });
       const newJob = await res.json();
+      if (!res.ok) {
+        alert(newJob.error || 'Failed to create job');
+        return;
+      }
       setJobs(prev => [newJob, ...prev]);
     } catch (err) {
       console.error('Error creating job', err);
@@ -176,12 +324,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const res = await fetch('/api/proposals', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': currentUser.id,
-          'x-user-name': currentUser.name,
-          'x-user-role': currentUser.role
-        },
+        headers: authHeaders(currentUser),
+        credentials: 'include',
         body: JSON.stringify(proposalData)
       });
 
@@ -193,15 +337,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const newProp = await res.json();
       setProposals(prev => [newProp, ...prev]);
-
-      // Deduct connects locally
       const cost = 6 + (proposalData.boostCredits || 0);
       setUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, connects: Math.max(0, u.connects - cost) } : u));
-      
-      // Update job proposal count
       setJobs(prev => prev.map(j => j.id === proposalData.jobId ? { ...j, proposalsCount: j.proposalsCount + 1 } : j));
     } catch (err) {
       console.error('Error submitting proposal', err);
+    }
+  };
+
+  const acceptProposal = async (proposalId: string) => {
+    try {
+      const res = await fetch(`/api/proposals/${proposalId}/accept`, {
+        method: 'POST',
+        headers: authHeaders(currentUser),
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Failed to accept proposal');
+        return;
+      }
+      setProposals(prev => prev.map(p => p.id === proposalId ? data.proposal : p));
+      if (data.contract) setContracts(prev => [data.contract, ...prev.filter(c => c.id !== data.contract.id)]);
+      await refreshBootstrap();
+    } catch (err) {
+      console.error('Error accepting proposal', err);
+    }
+  };
+
+  const declineProposal = async (proposalId: string) => {
+    try {
+      const res = await fetch(`/api/proposals/${proposalId}/decline`, {
+        method: 'POST',
+        headers: authHeaders(currentUser),
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Failed to decline proposal');
+        return;
+      }
+      setProposals(prev => prev.map(p => p.id === proposalId ? data.proposal : p));
+    } catch (err) {
+      console.error('Error declining proposal', err);
     }
   };
 
@@ -209,22 +387,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const res = await fetch(`/api/contracts/${contractId}/escrow/release`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': currentUser.id,
-          'x-user-name': currentUser.name,
-          'x-user-role': currentUser.role
-        },
+        headers: authHeaders(currentUser),
+        credentials: 'include',
         body: JSON.stringify({ milestoneId })
       });
       const data = await res.json();
       if (data.success) {
         setContracts(prev => prev.map(c => c.id === contractId ? data.contract : c));
-        // Refresh wallet
-        setUsers(prev => prev.map(u => u.role === 'freelancer' ? { ...u, walletBalance: u.walletBalance + 1000 } : u));
+        if (selectedContract?.id === contractId) setSelectedContract(data.contract);
+        await refreshBootstrap();
       }
     } catch (err) {
       console.error('Error releasing escrow', err);
+    }
+  };
+
+  const submitMilestone = async (contractId: string, milestoneId: string, note: string) => {
+    try {
+      const res = await fetch(`/api/contracts/${contractId}/milestones/${milestoneId}/submit`, {
+        method: 'POST',
+        headers: authHeaders(currentUser),
+        credentials: 'include',
+        body: JSON.stringify({ submissionNote: note })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Failed to submit milestone');
+        return;
+      }
+      if (data.contract) {
+        setContracts(prev => prev.map(c => c.id === contractId ? data.contract : c));
+        setSelectedContract(data.contract);
+      }
+    } catch (err) {
+      console.error('Error submitting milestone', err);
     }
   };
 
@@ -233,22 +429,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const res = await fetch('/api/messages', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': currentUser.id,
-          'x-user-name': currentUser.name,
-          'x-user-role': currentUser.role
-        },
+        headers: authHeaders(currentUser),
+        credentials: 'include',
         body: JSON.stringify({
           conversationId: activeConversation.id,
-          senderId: currentUser.id,
-          senderName: currentUser.name,
-          senderAvatar: currentUser.avatar,
           text,
           voiceNoteUrl
         })
       });
       const newMsg = await res.json();
+      if (!res.ok) return;
       setMessages(prev => [...prev, newMsg]);
       setConversations(prev => prev.map(c => c.id === activeConversation.id ? { ...c, lastMessage: text || 'Voice Note', lastMessageTimestamp: newMsg.timestamp } : c));
     } catch (err) {
@@ -260,17 +450,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const res = await fetch('/api/connects/purchase', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': currentUser.id,
-          'x-user-name': currentUser.name,
-          'x-user-role': currentUser.role
-        },
+        headers: authHeaders(currentUser),
+        credentials: 'include',
         body: JSON.stringify({ connectsAmount: amount, price })
       });
       const data = await res.json();
       if (data.success) {
         setUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, connects: data.newConnects, walletBalance: data.newBalance } : u));
+      } else if (data.error) {
+        alert(data.error);
       }
     } catch (err) {
       console.error('Error buying connects', err);
@@ -281,12 +469,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const res = await fetch(`/api/disputes/${disputeId}/resolve`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': currentUser.id,
-          'x-user-name': currentUser.name,
-          'x-user-role': currentUser.role
-        },
+        headers: authHeaders(currentUser),
+        credentials: 'include',
         body: JSON.stringify({ decision, refundClientAmount: refundClient, releaseFreelancerAmount: releaseFreelancer })
       });
       const data = await res.json();
@@ -302,16 +486,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const res = await fetch(`/api/contracts/${contractId}/timesheet`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': currentUser.id,
-          'x-user-name': currentUser.name,
-          'x-user-role': currentUser.role
-        },
+        headers: authHeaders(currentUser),
+        credentials: 'include',
         body: JSON.stringify({ hours, notes, activityScore: 92, isManual: false })
       });
       const entry = await res.json();
+      if (!res.ok) return;
       setContracts(prev => prev.map(c => c.id === contractId ? { ...c, timesheets: [entry, ...c.timesheets] } : c));
+      if (selectedContract?.id === contractId) {
+        setSelectedContract(prev => prev ? { ...prev, timesheets: [entry, ...prev.timesheets] } : prev);
+      }
     } catch (err) {
       console.error('Error logging time', err);
     }
@@ -319,13 +503,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const markNotificationRead = (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+    fetch(`/api/notifications/${id}/read`, {
+      method: 'POST',
+      headers: authHeaders(currentUser),
+      credentials: 'include'
+    }).catch(() => undefined);
   };
 
-  // AI Helpers
   const generateAIJobDescription = async (prompt: string, category: string, experience: string) => {
     const res = await fetch('/api/ai/job-generator', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(currentUser),
+      credentials: 'include',
       body: JSON.stringify({ prompt, category, experienceLevel: experience })
     });
     return res.json();
@@ -334,7 +523,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const generateAIProposal = async (jobTitle: string, jobDesc: string) => {
     const res = await fetch('/api/ai/proposal-generator', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(currentUser),
+      credentials: 'include',
       body: JSON.stringify({ jobTitle, jobDescription: jobDesc, freelancerProfile: freelancerProfile.overview })
     });
     return res.json();
@@ -343,18 +533,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const optimizeAIProfile = async (headline: string, overview: string) => {
     const res = await fetch('/api/ai/profile-optimizer', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(currentUser),
+      credentials: 'include',
       body: JSON.stringify({ headline, overview, skills: freelancerProfile.skills })
     });
     const data = await res.json();
     if (data.improvedHeadline) {
+      const nextSkills = Array.from(new Set([...freelancerProfile.skills, ...(data.suggestedSkillsToAdd || [])]));
       setFreelancerProfile(prev => ({
         ...prev,
         headline: data.improvedHeadline,
         overview: data.improvedOverview,
-        skills: Array.from(new Set([...prev.skills, ...(data.suggestedSkillsToAdd || [])])),
+        skills: nextSkills,
         profileStrength: 98
       }));
+      fetch('/api/profile/freelancer', {
+        method: 'PATCH',
+        headers: authHeaders(currentUser),
+        credentials: 'include',
+        body: JSON.stringify({
+          headline: data.improvedHeadline,
+          overview: data.improvedOverview,
+          skills: nextSkills,
+          profileStrength: 98
+        })
+      }).catch(() => undefined);
     }
     return data;
   };
@@ -362,7 +565,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const checkAIScam = async (text: string) => {
     const res = await fetch('/api/ai/scam-checker', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(currentUser),
+      credentials: 'include',
       body: JSON.stringify({ text })
     });
     return res.json();
@@ -374,6 +578,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentRole,
         setRole,
         currentUser,
+        isAuthenticated,
+        authChecked,
+        loginIntentRole,
         freelancerProfile,
         clientProfile,
         agencyProfile,
@@ -386,6 +593,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         disputes,
         notifications,
         activityLogs,
+        isBootstrapping,
         activeTab,
         setActiveTab,
         searchQuery,
@@ -414,9 +622,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsAuthModalOpen,
         isJobDetailsOpen,
         setIsJobDetailsOpen,
+        loginUser,
+        loginAsGuest,
+        logoutUser,
+        goToLogin,
         createJob,
         submitProposal,
+        acceptProposal,
+        declineProposal,
         releaseMilestoneEscrow,
+        submitMilestone,
         sendMessage,
         buyConnects,
         resolveDispute,

@@ -49,7 +49,7 @@ export const AgencyDashboard: React.FC = () => {
         <div className="flex items-center gap-4 flex-wrap w-full md:w-auto">
           <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50 text-center">
             <div className="text-[11px] text-slate-300">Total Agency Earnings</div>
-            <div className="text-lg font-black text-purple-400">${agencyProfile.totalEarnings.toLocaleString()}</div>
+            <div className="text-lg font-black text-purple-400">${agencyProfile.totalEarnings.toLocaleString('en-US')}</div>
           </div>
           <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50 text-center">
             <div className="text-[11px] text-slate-300">Roster Count</div>
@@ -99,7 +99,7 @@ export const AgencyDashboard: React.FC = () => {
                   <div>
                     <h3 className="font-bold text-slate-900 text-sm">{member.name}</h3>
                     <p className="text-xs text-slate-600">{member.title}</p>
-                    <span className="text-[11px] text-slate-500 font-mono">${member.hourlyRate}/hr • Earned ${member.totalEarned.toLocaleString()}</span>
+                    <span className="text-[11px] text-slate-500 font-mono">${member.hourlyRate}/hr • Earned ${member.totalEarned.toLocaleString('en-US')}</span>
                   </div>
                 </div>
 

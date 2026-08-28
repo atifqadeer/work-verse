@@ -105,7 +105,7 @@ export const FreelancerDashboard: React.FC = () => {
               <div className="flex items-center gap-4 mt-2 text-xs text-slate-300 font-mono">
                 <span>Hourly Rate: ${freelancerProfile.hourlyRate}/hr</span>
                 <span>•</span>
-                <span>Earned: ${freelancerProfile.totalEarned.toLocaleString()}</span>
+                <span>Earned: ${freelancerProfile.totalEarned.toLocaleString('en-US')}</span>
                 <span>•</span>
                 <span>Availability: {freelancerProfile.availability}</span>
               </div>
@@ -332,7 +332,7 @@ export const FreelancerDashboard: React.FC = () => {
                       {job.clientPaymentVerified && (
                         <div className="flex items-center gap-1 text-emerald-600 font-medium">
                           <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Payment Verified (${job.clientTotalSpent.toLocaleString()} spent)</span>
+                          <span>Payment Verified (${job.clientTotalSpent.toLocaleString('en-US')} spent)</span>
                         </div>
                       )}
                       <span>Proposals: {job.proposalsCount}</span>

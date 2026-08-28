@@ -12,7 +12,7 @@ export const AuthModal: React.FC = () => {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    loginUser(email, roleSelect);
+    loginUser(email, roleSelect, password);
     setIsAuthModalOpen(false);
   };
 
@@ -31,14 +31,14 @@ export const AuthModal: React.FC = () => {
         {/* Social Logins */}
         <div className="space-y-2">
           <button
-            onClick={() => { loginUser('google_user@gmail.com', roleSelect); setIsAuthModalOpen(false); }}
+            onClick={() => { loginUser('google_user@gmail.com', roleSelect, 'WorkVerse123!'); setIsAuthModalOpen(false); }}
             className="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 shadow-xs"
           >
             <span>Continue with Google Account</span>
           </button>
           
           <button
-            onClick={() => { loginUser('github_user@github.com', roleSelect); setIsAuthModalOpen(false); }}
+            onClick={() => { loginUser('github_user@github.com', roleSelect, 'WorkVerse123!'); setIsAuthModalOpen(false); }}
             className="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 shadow-xs"
           >
             <span>Continue with GitHub</span>

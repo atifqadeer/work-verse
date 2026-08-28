@@ -20,6 +20,7 @@ import {
 
 export const ClientDashboard: React.FC = () => {
   const {
+    currentUser,
     jobs,
     proposals,
     contracts,
@@ -32,6 +33,8 @@ export const ClientDashboard: React.FC = () => {
     setSelectedContract,
     setIsContractModalOpen,
     releaseMilestoneEscrow,
+    acceptProposal,
+    declineProposal,
     activeTab,
     setActiveTab
   } = useApp();
@@ -39,7 +42,7 @@ export const ClientDashboard: React.FC = () => {
   const [activeJobFilter, setActiveJobFilter] = useState<'open' | 'closed' | 'all'>('open');
   const [selectedProposalForReview, setSelectedProposalForReview] = useState<Proposal | null>(null);
 
-  const clientJobs = jobs.filter(j => j.clientId === 'usr_client_1');
+  const clientJobs = jobs.filter(j => j.clientId === currentUser.id);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -64,7 +67,7 @@ export const ClientDashboard: React.FC = () => {
           <div className="flex items-center gap-4 flex-wrap w-full md:w-auto">
             <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50 text-center flex-1 sm:flex-none">
               <div className="text-[11px] text-slate-300">Total Spent</div>
-              <div className="text-lg font-black text-emerald-400">${clientProfile.totalSpent.toLocaleString()}</div>
+              <div className="text-lg font-black text-emerald-400">${clientProfile.totalSpent.toLocaleString('en-US')}</div>
             </div>
 
             <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50 text-center flex-1 sm:flex-none">
@@ -322,13 +325,17 @@ export const ClientDashboard: React.FC = () => {
 
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
               <button
-                onClick={() => setSelectedProposalForReview(null)}
+                onClick={async () => {
+                  await declineProposal(selectedProposalForReview.id);
+                  setSelectedProposalForReview(null);
+                }}
                 className="px-4 py-2 text-slate-500 hover:text-slate-800 text-xs font-semibold"
               >
                 Decline
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
+                  await acceptProposal(selectedProposalForReview.id);
                   alert(`Contract created and funded into Escrow for $${selectedProposalForReview.bidAmount}!`);
                   setSelectedProposalForReview(null);
                 }}
